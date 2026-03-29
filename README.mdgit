@@ -1,0 +1,1 @@
+# multi-photo-upload initgit add README.mdgit commit -m first commitgit branch -M maingit remote add origin https://github.com/taliabarkai/multi-photo-upload.gitgit push -u origin main
