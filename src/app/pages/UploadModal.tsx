@@ -299,7 +299,7 @@ export default function UploadModal({
         </div>
 
         {/* Content */}
-        <div className="bg-white relative shrink-0 w-full overflow-y-auto">
+        <div className="bg-white relative flex-1 min-h-0 w-full overflow-y-auto">
           <div className="overflow-clip rounded-[inherit] size-full">
             <div className="content-stretch flex flex-col gap-[16px] items-start pb-[16px] p-[16px] relative w-full">
               
@@ -309,9 +309,15 @@ export default function UploadModal({
                   <Stepper currentStep={currentStep} totalSteps={totalPhotos} onStepClick={handleStepClick} />
                 </div>
               )}
+
+              {totalPhotos > 1 && (
+                <p className="w-full text-center text-[14px] font-normal leading-[18px] text-black">
+                  Pendant {currentStep} of {totalPhotos}
+                </p>
+              )}
               
               {/* Image Upload Area */}
-              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full px-[24px]">
+              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
                 <div 
                   className="content-stretch flex flex-col items-center relative rounded-[4px] shrink-0 w-full"
                   onTouchStart={totalPhotos > 1 ? handleTouchStart : undefined}

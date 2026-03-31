@@ -9,6 +9,8 @@ interface BulkUploadOptionProps {
   uploadMode?:
     | 'personalization-bulk'
     | 'personalization-bulk-regular'
+    | 'image-only-v5'
+    | 'slow-upload-v7'
     | 'v5a-bulk-multi'
     | 'photo-only'
     | 'image-only';
@@ -23,7 +25,11 @@ export default function BulkUploadOption({ onUploadClick, onBulkUploadClick, tot
     uploadMode === 'personalization-bulk' ||
     uploadMode === 'personalization-bulk-regular' ||
     uploadMode === 'v5a-bulk-multi';
-  const isPhotoOnlyMode = uploadMode === 'photo-only' || uploadMode === 'image-only';
+  const isPhotoOnlyMode =
+    uploadMode === 'photo-only' ||
+    uploadMode === 'slow-upload-v7' ||
+    uploadMode === 'image-only' ||
+    uploadMode === 'image-only-v5';
   
   const charCount = name.length;
   

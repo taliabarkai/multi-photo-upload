@@ -382,6 +382,8 @@ export default function BulkPhotoUploadModal({
     }
   };
 
+  const showSaveAndClose = totalPhotos > 1 && currentStep < totalPhotos;
+
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-[16px]"
@@ -405,9 +407,9 @@ export default function BulkPhotoUploadModal({
         </div>
 
         {/* Content */}
-        <div className="bg-white relative shrink-0 w-full overflow-y-auto">
-          <div className="overflow-clip rounded-[inherit] size-full">
-            <div className="content-stretch flex flex-col gap-[16px] items-start pb-[16px] p-[16px] relative w-full">
+        <div className="bg-white relative shrink-0 w-full min-w-0 overflow-y-auto">
+          <div className="overflow-clip rounded-[inherit] size-full min-w-0">
+            <div className="content-stretch box-border flex flex-col gap-[16px] items-start pb-[16px] pt-[16px] px-[16px] relative w-full min-w-0 max-w-full">
               
               {/* Pagination with Arrow Navigation - Moved to Top */}
               {totalPhotos > 1 && (
@@ -415,11 +417,17 @@ export default function BulkPhotoUploadModal({
                   <Stepper currentStep={currentStep} totalSteps={totalPhotos} onStepClick={handleStepperNavigate} />
                 </div>
               )}
+
+              {totalPhotos > 1 && (
+                <p className="w-full text-center text-[14px] font-normal leading-[18px] text-black">
+                  Pendant {currentStep} of {totalPhotos}
+                </p>
+              )}
               
               {/* Image Upload Area - Regular Photo (not SVG editor) */}
-              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full px-[24px]">
+              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full min-w-0 max-w-full">
                 <div 
-                  className="content-stretch flex flex-col items-center relative rounded-[4px] shrink-0 w-full"
+                  className="content-stretch flex flex-col items-center relative rounded-[4px] shrink-0 w-full min-w-0 max-w-full"
                   onTouchStart={totalPhotos > 1 ? handleTouchStart : undefined}
                   onTouchEnd={totalPhotos > 1 ? handleTouchEnd : undefined}
                   onMouseDown={totalPhotos > 1 ? handleMouseDown : undefined}
@@ -430,7 +438,7 @@ export default function BulkPhotoUploadModal({
                 >
                   {localImage ? (
                     <>
-                      <div className="relative w-full aspect-square overflow-hidden rounded-[4px] border border-[#d0d0d0] border-solid">
+                      <div className="relative w-full min-w-0 max-w-full aspect-square overflow-hidden rounded-[4px] border border-[#d0d0d0] border-solid">
                         <img 
                           src={localImage} 
                           alt="Uploaded" 
@@ -450,7 +458,9 @@ export default function BulkPhotoUploadModal({
                         {/* Warning icon overlay on top left */}
                         {currentPhoto?.hasWarning && (
                           <div className="absolute top-[16px] left-[16px] size-[32px]">
-                            <PhotoWarning />
+                            <div className="relative size-full scale-[1.33] origin-center">
+                              <PhotoWarning />
+                            </div>
                           </div>
                         )}
                         
@@ -540,7 +550,7 @@ export default function BulkPhotoUploadModal({
                     <>
                       <button 
                         onClick={handleUploadClick}
-                        className="relative w-full aspect-square cursor-pointer"
+                        className="relative w-full min-w-0 max-w-full aspect-square cursor-pointer"
                       >
                         <div aria-hidden="true" className="absolute border border-[#E3E3E3] border-solid inset-0 pointer-events-none rounded-[4px]" />
                         <div className="absolute inset-0 flex flex-col gap-[8px] items-center justify-center">
@@ -627,32 +637,40 @@ export default function BulkPhotoUploadModal({
                         <p className="font-semibold leading-[18px] text-[14px] text-black">Low-Resolution Image</p>
                       </div>
                       <p className="font-normal !text-[14px] leading-[18px] text-black">
-                        {`We recommend uploading a higher-quality image.  You can continue with this one, but we aren't responsible if it appears blurry.`}
+                        {`We recommend uploading a higher-quality image. You can continue, but we’re not responsible if it appears blurry.`}
                       </p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="content-stretch flex items-center justify-between relative shrink-0 w-full">
-                <button 
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saveAndCloseDisabledV2}
-                  title={
-                    saveAndCloseDisabledV2
-                      ? 'Complete personalization from Image 1 forward (at least one step) to save and close'
-                      : undefined
-                  }
-                  className={`content-stretch flex items-center justify-center relative shrink-0 ${
-                    saveAndCloseDisabledV2 ? 'opacity-40 cursor-not-allowed' : ''
-                  }`}
-                >
-                  <div aria-hidden="true" className="absolute border-[#1e1e1e] border-b border-solid inset-0 pointer-events-none" />
-                  <p className="font-semibold leading-[18px] not-italic relative shrink-0 text-[#1e1e1e] text-[14px]">Save & Close</p>
-                </button>
-                
+              {/* Action Buttons — Save & Close hidden for single image and on final confirm step */}
+              <div
+                className={`content-stretch flex items-center relative shrink-0 w-full ${
+                  showSaveAndClose ? 'justify-between' : 'justify-end'
+                }`}
+              >
+                {showSaveAndClose && (
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={saveAndCloseDisabledV2}
+                    title={
+                      saveAndCloseDisabledV2
+                        ? 'Complete personalization from Image 1 forward (at least one step) to save and close'
+                        : undefined
+                    }
+                    className={`content-stretch flex items-center justify-center relative shrink-0 ${
+                      saveAndCloseDisabledV2 ? 'opacity-40 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <div aria-hidden="true" className="absolute border-[#1e1e1e] border-b border-solid inset-0 pointer-events-none" />
+                    <p className="font-semibold leading-[18px] not-italic relative shrink-0 text-[#1e1e1e] text-[14px]">
+                      Save & Close
+                    </p>
+                  </button>
+                )}
+
                 <div className="content-stretch flex gap-[24px] items-center relative shrink-0">
                   {totalPhotos > 1 && currentStep > 1 && (
                     <button 

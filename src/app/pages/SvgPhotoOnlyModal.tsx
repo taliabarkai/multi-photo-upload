@@ -9,6 +9,8 @@ import PhotoWarning from '../../imports/PhotoWarning';
 import Stepper from '../components/Stepper';
 import type { PhotoData } from '../contexts/UploadContext';
 import { mergePendingImagesIntoDraft, flushCurrentStepToDraft } from '../utils/modalDraft';
+import ErrorPopup from '../components/ErrorPopup';
+import PhotoErrorIcon from '../components/PhotoErrorIcon';
 
 interface SvgPhotoOnlyModalProps {
   step: number;
@@ -41,6 +43,9 @@ export default function SvgPhotoOnlyModal({
   
   // Initialize draft state from current photos - sync with actual photos
   const [draftPhotos, setDraftPhotos] = useState<typeof photos>([]);
+
+  const v3TooSmallError =
+    "This photo is too small. Please replace it with one that's at least 600 x 600 pixels.";
   
   useEffect(() => {
     const base = photos.map((photo) => ({ ...photo }));
@@ -49,6 +54,16 @@ export default function SvgPhotoOnlyModal({
       initial = base;
     } else if (pendingDraftImages.length > 0) {
       initial = mergePendingImagesIntoDraft(base, pendingDraftImages, isEditMode);
+      // V3-only prototype: when selecting exactly 3 pendants and entering the editor,
+      // force Pendant 1 into a blocking error state until replaced.
+      if (totalPhotos === 3 && initial[0]?.image) {
+        initial[0] = {
+          ...initial[0],
+          hasError: true,
+          errorMessage: v3TooSmallError,
+          hasWarning: false,
+        };
+      }
     } else if (persistedDraft && persistedDraft.length > 0) {
       initial = persistedDraft.map((p) => ({ ...p }));
     } else {
@@ -71,7 +86,6 @@ export default function SvgPhotoOnlyModal({
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [wheelDeltaX, setWheelDeltaX] = useState(0);
   const wheelTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-  const [prevStep, setPrevStep] = useState(currentStep);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Initialize on mount - load the correct photo for the current step
@@ -81,40 +95,42 @@ export default function SvgPhotoOnlyModal({
       setLocalImage(photoForStep?.image || null);
       setIsInitialized(true);
     }
-  }, []);
+  }, [isInitialized, draftPhotos, currentStep]);
 
   // Update local image when pending image changes
   useEffect(() => {
     if (pendingImage) {
       setLocalImage(pendingImage);
+      setDraftPhotos((prev) => {
+        const next = [...prev];
+        const idx = currentStep - 1;
+        if (idx >= 0 && idx < next.length) {
+          next[idx] = {
+            ...next[idx],
+            image: pendingImage,
+            hasError: false,
+            errorMessage: undefined,
+            hasWarning: false,
+          };
+        }
+        return next;
+      });
       // Use setTimeout to defer the state update to avoid setState during render warning
       setTimeout(() => {
         setPendingImage(null);
       }, 0);
     }
-  }, [pendingImage, setPendingImage]);
+  }, [pendingImage, setPendingImage, currentStep]);
 
-  // Handle step changes
+  // When parent changes `step`, just load that step's draft (draft is flushed by navigation handlers).
   useEffect(() => {
-    if (currentStep !== prevStep) {
-      // Save previous photo to draft
-      const updatedDrafts = [...draftPhotos];
-      updatedDrafts[prevStep - 1] = {
-        ...updatedDrafts[prevStep - 1],
-        image: localImage,
-      };
-      setDraftPhotos(updatedDrafts);
-      
-      // Load new photo from draft
-      const newPhoto = updatedDrafts[currentStep - 1];
-      setLocalImage(newPhoto?.image || null);
-      setZoom(1);
-      setRotation(0);
-      setPosition({ x: 0, y: 0 });
-      
-      setPrevStep(currentStep);
-    }
-  }, [currentStep]);
+    if (!isInitialized) return;
+    const newPhoto = draftPhotos[currentStep - 1];
+    setLocalImage(newPhoto?.image || null);
+    setZoom(1);
+    setRotation(0);
+    setPosition({ x: 0, y: 0 });
+  }, [currentStep, draftPhotos, isInitialized]);
 
   const handleUploadClick = () => {
     onGalleryOpen(currentStep - 1);
@@ -137,18 +153,15 @@ export default function SvgPhotoOnlyModal({
   };
 
   const handleNext = () => {
-    // Update draft with current photo
-    const updatedDrafts = [...draftPhotos];
-    updatedDrafts[currentStep - 1] = {
-      ...updatedDrafts[currentStep - 1],
-      image: localImage,
-    };
-    setDraftPhotos(updatedDrafts);
-
     if (currentStep < totalPhotos) {
+      setDraftPhotos((prev) =>
+        flushCurrentStepToDraft(prev, currentStep, {
+          image: localImage,
+        })
+      );
       onStepChange(currentStep + 1);
     } else {
-      const committed = flushCurrentStepToDraft(updatedDrafts, currentStep, { image: localImage });
+      const committed = flushCurrentStepToDraft(draftPhotos, currentStep, { image: localImage });
       onCommitDraft(committed);
     }
   };
@@ -168,6 +181,11 @@ export default function SvgPhotoOnlyModal({
 
   const handleBack = () => {
     if (currentStep > 1) {
+      setDraftPhotos((prev) =>
+        flushCurrentStepToDraft(prev, currentStep, {
+          image: localImage,
+        })
+      );
       onStepChange(currentStep - 1);
     } else {
       flushAndDismiss();
@@ -176,17 +194,16 @@ export default function SvgPhotoOnlyModal({
 
   const handleStepClick = (step: number) => {
     // Save current draft before switching
-    const updatedDrafts = [...draftPhotos];
-    updatedDrafts[currentStep - 1] = {
-      ...updatedDrafts[currentStep - 1],
-      image: localImage,
-    };
-    setDraftPhotos(updatedDrafts);
+    setDraftPhotos((prev) =>
+      flushCurrentStepToDraft(prev, currentStep, {
+        image: localImage,
+      })
+    );
     
     onStepChange(step);
   };
 
-  const isNextEnabled = localImage !== null;
+  const isNextEnabled = localImage !== null && !currentPhoto?.hasError;
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
@@ -278,6 +295,8 @@ export default function SvgPhotoOnlyModal({
     }
   }, [draftPhotos, currentStep]);
 
+  const showSaveAndClose = totalPhotos > 1 && currentStep < totalPhotos;
+
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-[16px]"
@@ -301,7 +320,7 @@ export default function SvgPhotoOnlyModal({
         </div>
 
         {/* Content */}
-        <div className="bg-white relative shrink-0 w-full overflow-y-auto">
+        <div className="bg-white relative flex-1 min-h-0 w-full overflow-y-auto">
           <div className="overflow-clip rounded-[inherit] size-full">
             <div className="content-stretch flex flex-col gap-[16px] items-start pb-[16px] p-[16px] relative w-full">
               
@@ -311,9 +330,15 @@ export default function SvgPhotoOnlyModal({
                   <Stepper currentStep={currentStep} totalSteps={totalPhotos} onStepClick={handleStepClick} />
                 </div>
               )}
+
+              {totalPhotos > 1 && (
+                <p className="w-full text-center text-[14px] font-normal leading-[18px] text-black">
+                  Pendant {currentStep} of {totalPhotos}
+                </p>
+              )}
               
               {/* SVG Masked Image Upload Area */}
-              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full px-[24px]">
+              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
                 <div 
                   className="content-stretch flex flex-col items-center relative rounded-[4px] shrink-0 w-full"
                   onWheel={totalPhotos > 1 ? handleContainerWheel : undefined}
@@ -393,10 +418,21 @@ export default function SvgPhotoOnlyModal({
                           />
                         </svg>
                         
-                        {/* Warning icon overlay on top left */}
-                        {currentPhoto?.hasWarning && (
+                        {/* Error icon overlay on top left (priority over warning) */}
+                        {currentPhoto?.hasError && (
                           <div className="absolute top-[16px] left-[16px] size-[32px]">
-                            <PhotoWarning />
+                            <div className="relative size-full scale-[1.33] origin-center">
+                              <PhotoErrorIcon />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Warning icon overlay on top left (only if no error) */}
+                        {currentPhoto?.hasWarning && !currentPhoto?.hasError && (
+                          <div className="absolute top-[16px] left-[16px] size-[32px]">
+                            <div className="relative size-full scale-[1.33] origin-center">
+                              <PhotoWarning />
+                            </div>
                           </div>
                         )}
                         
@@ -546,8 +582,8 @@ export default function SvgPhotoOnlyModal({
                 </div>
               </div>
 
-              {/* Low-Resolution Warning Banner */}
-              {currentPhoto?.hasWarning && (
+              {/* Low-Resolution Warning Banner (only if no error) */}
+              {currentPhoto?.hasWarning && !currentPhoto?.hasError && (
                 <div className="bg-[#f5f5f5] w-full p-[12px] rounded-[4px]">
                   <div className="flex gap-[12px] items-start w-full">
                     <div className="flex flex-col gap-[4px] flex-1">
@@ -574,25 +610,37 @@ export default function SvgPhotoOnlyModal({
                         <p className="font-semibold leading-[18px] text-[14px] text-black">Low-Resolution Image</p>
                       </div>
                       <p className="font-normal !text-[14px] leading-[18px] text-black">
-                        {`We recommend uploading a higher-quality image.  You can continue with this one, but we aren't responsible if it appears blurry.`}
+                        {`We recommend uploading a higher-quality image. You can continue, but we’re not responsible if it appears blurry.`}
                       </p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="content-stretch flex items-center justify-between relative shrink-0 w-full">
-                <button 
-                  onClick={handleSave}
-                  className="content-stretch flex items-center justify-center relative shrink-0"
-                >
-                  <div aria-hidden="true" className="absolute border-[#1e1e1e] border-b border-solid inset-0 pointer-events-none" />
-                  <p className="font-semibold leading-[18px] not-italic relative shrink-0 text-[#1e1e1e] text-[14px]">
-                    {totalPhotos === 1 ? 'Close' : 'Save & Close'}
-                  </p>
-                </button>
-                
+              {/* Error Banner (blocking) */}
+              {currentPhoto?.hasError && currentPhoto?.errorMessage && (
+                <ErrorPopup message={currentPhoto.errorMessage} />
+              )}
+
+              {/* Action Buttons — Save & Close hidden for single image and on final confirm step */}
+              <div
+                className={`content-stretch flex items-center relative shrink-0 w-full ${
+                  showSaveAndClose ? 'justify-between' : 'justify-end'
+                }`}
+              >
+                {showSaveAndClose && (
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    className="content-stretch flex items-center justify-center relative shrink-0"
+                  >
+                    <div aria-hidden="true" className="absolute border-[#1e1e1e] border-b border-solid inset-0 pointer-events-none" />
+                    <p className="font-semibold leading-[18px] not-italic relative shrink-0 text-[#1e1e1e] text-[14px]">
+                      Save & Close
+                    </p>
+                  </button>
+                )}
+
                 <div className="content-stretch flex gap-[24px] items-center relative shrink-0">
                   {totalPhotos > 1 && currentStep > 1 && (
                     <button 
@@ -606,7 +654,7 @@ export default function SvgPhotoOnlyModal({
                   <button
                     onClick={handleNext}
                     disabled={!isNextEnabled}
-                    className={`content-stretch flex h-[50px] items-center justify-center px-[24px] py-[12px] relative shrink-0 ${
+                    className={`content-stretch flex h-[50px] items-center justify-center px-[24px] py-[12px] relative shrink-0 min-w-[112px] ${
                       isNextEnabled ? 'bg-black' : 'bg-[#aeaeae]'
                     }`}
                   >

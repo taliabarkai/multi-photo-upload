@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import ImageUploadOverlay from './ImageUploadOverlay';
 import svgPaths from '../../imports/svg-cqty5kzprz';
 import arrowPaths from '../../imports/svg-yaqq1s08pp';
 import Icon from '../../imports/Icon-89-533';
+import { useUpload } from '../contexts/UploadContext';
 
 /** Empty slot — same layout as PhotoList DraggablePhotoItem (no image). */
 export function EmptyPendantSlot({
@@ -119,19 +120,43 @@ export function UploadedPendantRow({
   const hasImage = imageSrc !== null;
   const thumbHandler = onThumbnailClick ?? onPhotoClick;
   const showReorderIcon = totalPhotos > 1 && !hideReorderHandle;
+  const { uploadMode, cancelSimulatedUploadForSlot } = useUpload();
+  const [showSlowNotice, setShowSlowNotice] = useState(false);
+  const isSlowUploadMode = uploadMode === 'slow-upload-v7';
+
+  useEffect(() => {
+    if (!(slotPending && isSlowUploadMode)) {
+      setShowSlowNotice(false);
+      return;
+    }
+    const t = window.setTimeout(() => setShowSlowNotice(true), 9000);
+    return () => window.clearTimeout(t);
+  }, [slotPending, isSlowUploadMode]);
 
   return (
     <div className="relative w-full">
       <div aria-hidden="true" className="absolute inset-0 pointer-events-none rounded-[4px]" />
 
-      {hasImage && !isAnyUploading && (
+      {hasImage && (
         <button
           type="button"
-          onClick={onRemove}
-          className="absolute top-[-4px] right-[-4px] z-10 p-[4px] bg-[rgb(255,255,255)] rounded-[100px] border border-[#E3E3E3] shadow-[0px_2px_4px_0px_rgba(0,0,0,0.15)] cursor-pointer"
+          aria-label="Remove photo"
+          onClick={() => {
+            if (slotPending) cancelSimulatedUploadForSlot(pendantIndex);
+            onRemove();
+          }}
+          className="absolute top-[-4px] right-[-4px] z-30 p-[4px] bg-[rgb(255,255,255)] rounded-[100px] border border-[#E3E3E3] shadow-[0px_2px_4px_0px_rgba(0,0,0,0.15)] cursor-pointer"
         >
-          <svg className="block size-[16px]" fill="none" viewBox="0 0 16 16">
-            <path d="M12 4L4 12M4 4L12 12" stroke="black" strokeWidth="1.5" strokeLinecap="round" />
+          <svg
+            className={`block size-[16px] ${
+              slotPending
+                ? 'text-black/40 min-[992px]:hover:text-black min-[992px]:focus-visible:text-black'
+                : 'text-black'
+            }`}
+            fill="none"
+            viewBox="0 0 16 16"
+          >
+            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>
       )}
@@ -196,6 +221,23 @@ export function UploadedPendantRow({
                     ? 'Uploading…'
                     : primaryLabelOverride ?? `Pendant ${pendantIndex + 1}`}
                 </p>
+                {slotPending && isSlowUploadMode && showSlowNotice && (
+                  <p className="font-normal leading-[16px] text-[12px] text-[#666]">
+                    This upload is taking longer than usual due to file size or connection. You can{' '}
+                    <button
+                      type="button"
+                      className="pointer-events-auto inline align-baseline font-normal text-[12px] leading-[16px] text-[#666] underline decoration-solid cursor-pointer p-0 m-0 bg-transparent border-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cancelSimulatedUploadForSlot(pendantIndex);
+                        onRemove();
+                      }}
+                    >
+                      cancel upload
+                    </button>{' '}
+                    or wait.
+                  </p>
+                )}
                 {!slotPending && secondaryContent}
               </button>
             </div>

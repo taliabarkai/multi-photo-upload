@@ -283,6 +283,9 @@ export default function MaskedUploadModal({
     setTouchStartX(null);
   };
 
+  /** Footer text action: only when multiple photos and not on final confirm step */
+  const showSaveAndClose = totalPhotos > 1 && currentStep < totalPhotos;
+
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-[16px]"
@@ -306,9 +309,9 @@ export default function MaskedUploadModal({
         </div>
 
         {/* Content */}
-        <div className="bg-white relative shrink-0 w-full overflow-y-auto">
+        <div className="bg-white relative flex-1 min-h-0 w-full overflow-y-auto">
           <div className="overflow-clip rounded-[inherit] size-full">
-            <div className="content-stretch flex flex-col gap-[16px] items-start pb-[16px] p-[16px] relative w-full">
+            <div className="content-stretch flex flex-col gap-[16px] items-start pb-[16px] pt-[16px] px-[16px] relative w-full">
               
               {/* Pagination with Arrow Navigation - At Top */}
               {totalPhotos > 1 && (
@@ -316,9 +319,15 @@ export default function MaskedUploadModal({
                   <Stepper currentStep={currentStep} totalSteps={totalPhotos} onStepClick={handleStepClick} />
                 </div>
               )}
+
+              {totalPhotos > 1 && (
+                <p className="w-full text-center text-[14px] font-normal leading-[18px] text-black">
+                  Pendant {currentStep} of {totalPhotos}
+                </p>
+              )}
               
               {/* SVG Masked Image Upload Area */}
-              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full px-[24px]">
+              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
                 <div className="content-stretch flex flex-col items-center relative rounded-[4px] shrink-0 w-full">
                   {localImage ? (
                     <>
@@ -543,7 +552,7 @@ export default function MaskedUploadModal({
 
               {/* Name Input (only for personalization mode) */}
               {isPersonalizationMode && (
-                <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full px-[0px] py-[8px]">
+                <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full py-[8px]">
                   <div className="content-stretch flex items-center relative shrink-0 w-full">
                     <p className="font-normal leading-[18px] not-italic text-[14px] text-black">
                       Add Name:<span className="text-[#989898]"> (Optional)</span>
@@ -576,18 +585,25 @@ export default function MaskedUploadModal({
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="content-stretch flex items-center justify-between relative shrink-0 w-full">
-                <button 
-                  onClick={handleSave}
-                  className="content-stretch flex items-center justify-center relative shrink-0"
-                >
-                  <div aria-hidden="true" className="absolute border-[#1e1e1e] border-b border-solid inset-0 pointer-events-none" />
-                  <p className="font-semibold leading-[18px] not-italic relative shrink-0 text-[#1e1e1e] text-[14px]">
-                    {totalPhotos === 1 ? 'Close' : 'Save & Close'}
-                  </p>
-                </button>
-                
+              {/* Action Buttons — Save & Close hidden for single image, and on last step (confirm) */}
+              <div
+                className={`content-stretch flex items-center relative shrink-0 w-full ${
+                  showSaveAndClose ? 'justify-between' : 'justify-end'
+                }`}
+              >
+                {showSaveAndClose && (
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    className="content-stretch flex items-center justify-center relative shrink-0"
+                  >
+                    <div aria-hidden="true" className="absolute border-[#1e1e1e] border-b border-solid inset-0 pointer-events-none" />
+                    <p className="font-semibold leading-[18px] not-italic relative shrink-0 text-[#1e1e1e] text-[14px]">
+                      Save & Close
+                    </p>
+                  </button>
+                )}
+
                 <div className="content-stretch flex gap-[24px] items-center relative shrink-0">
                   {totalPhotos > 1 && currentStep > 1 && (
                     <button 

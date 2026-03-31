@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useUpload } from '../contexts/UploadContext';
 import { useDrag, useDrop, DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -24,6 +24,8 @@ interface PhotoListProps {
   uploadMode:
     | 'personalization-bulk'
     | 'personalization-bulk-regular'
+    | 'image-only-v5'
+    | 'slow-upload-v7'
     | 'v5a-bulk-multi'
     | 'photo-only'
     | 'image-only';
@@ -70,11 +72,28 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
   movePhoto,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
-  const { activeUploadSlot, activeUploadProgress, isAnyUploading, isSlotPendingSimulatedUpload } =
+  const {
+    activeUploadSlot,
+    activeUploadProgress,
+    isAnyUploading,
+    isSlotPendingSimulatedUpload,
+    cancelSimulatedUploadForSlot,
+  } = useUpload();
     useUpload();
   const slotPending = hasImage && isSlotPendingSimulatedUpload(index);
   const slotActiveUpload = slotPending && activeUploadSlot === index;
   const uploadOverlayProgress = slotActiveUpload ? activeUploadProgress : 0;
+  const [showSlowNotice, setShowSlowNotice] = useState(false);
+  const isSlowUploadMode = uploadMode === 'slow-upload-v7';
+
+  useEffect(() => {
+    if (!(slotPending && isSlowUploadMode)) {
+      setShowSlowNotice(false);
+      return;
+    }
+    const t = window.setTimeout(() => setShowSlowNotice(true), 9000);
+    return () => window.clearTimeout(t);
+  }, [slotPending, isSlowUploadMode]);
 
   const [{ isDragging }, drag, preview] = useDrag({
     type: 'PHOTO',
@@ -114,14 +133,26 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
       <div aria-hidden="true" className="absolute inset-0 pointer-events-none rounded-[4px]"/>
       
       {/* X icon overlaying top right corner - only show when image exists */}
-      {hasImage && !isAnyUploading && (
+      {hasImage && (
         <button
           type="button"
-          onClick={() => onRemove(index)}
-          className="absolute top-[-4px] right-[-4px] z-10 p-[4px] bg-[rgb(255,255,255)] rounded-[100px] border border-[#E3E3E3] shadow-[0px_2px_4px_0px_rgba(0,0,0,0.15)] cursor-pointer"
+          aria-label="Remove photo"
+          onClick={() => {
+            if (slotPending) cancelSimulatedUploadForSlot(index);
+            onRemove(index);
+          }}
+          className="absolute top-[-4px] right-[-4px] z-30 p-[4px] bg-[rgb(255,255,255)] rounded-[100px] border border-[#E3E3E3] shadow-[0px_2px_4px_0px_rgba(0,0,0,0.15)] cursor-pointer"
         >
-          <svg className="block size-[16px]" fill="none" viewBox="0 0 16 16">
-            <path d="M12 4L4 12M4 4L12 12" stroke="black" strokeWidth="1.5" strokeLinecap="round" />
+          <svg
+            className={`block size-[16px] ${
+              slotPending
+                ? 'text-black/40 min-[992px]:hover:text-black min-[992px]:focus-visible:text-black'
+                : 'text-black'
+            }`}
+            fill="none"
+            viewBox="0 0 16 16"
+          >
+            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>
       )}
@@ -157,7 +188,7 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
                     <div className="relative h-full w-full overflow-hidden rounded-[4px] bg-[#f5f5f5]">
                       <ImageUploadOverlay progress={uploadOverlayProgress} />
                     </div>
-                  ) : (uploadMode === 'personalization-bulk' || uploadMode === 'photo-only') ? (
+                  ) : (uploadMode === 'personalization-bulk' || uploadMode === 'photo-only' || uploadMode === 'slow-upload-v7') ? (
                     // Heart-shaped masked image for V1 and V3
                     <div className="relative w-full h-full overflow-hidden rounded-[4px] bg-white">
                       {/* Background square image */}
@@ -238,6 +269,23 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
                   <p className="font-normal leading-[18px] text-[14px] text-black">
                     {slotPending ? 'Uploading…' : `Pendant ${index + 1}`}
                   </p>
+                  {slotPending && isSlowUploadMode && showSlowNotice && (
+                    <p className="font-normal leading-[16px] text-[12px] text-[#666]">
+                      This upload is taking longer than usual due to file size or connection. You can{' '}
+                      <button
+                        type="button"
+                        className="pointer-events-auto inline align-baseline font-normal text-[12px] leading-[16px] text-[#666] underline decoration-solid cursor-pointer p-0 m-0 bg-transparent border-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cancelSimulatedUploadForSlot(index);
+                          onRemove(index);
+                        }}
+                      >
+                        cancel upload
+                      </button>{' '}
+                      or wait.
+                    </p>
+                  )}
                   {!slotPending && photo.hasError && photo.errorMessage && (
                     <PhotoError message={photo.errorMessage} />
                   )}
@@ -398,7 +446,9 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
                     Pendant {index + 1}
                   </p>
                   <p className="relative shrink-0 whitespace-pre-wrap text-[12px] font-normal leading-[16px] text-[#989898]">
-                    Click to upload photo
+                    {uploadMode === 'personalization-bulk'
+                      ? 'Please upload image and text'
+                      : 'Click to upload photo'}
                   </p>
                 </div>
               </button>
@@ -463,7 +513,7 @@ function PhotoListContent({
   };
   
   const handlePhotoClick = (index: number) => {
-    if (uploadMode === 'image-only') {
+    if (uploadMode === 'image-only' || uploadMode === 'image-only-v5') {
       onEditPhoto(index);
     } else {
       handleEdit(index);
@@ -484,7 +534,10 @@ function PhotoListContent({
       <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex font-normal items-center justify-between not-italic relative w-full text-[14px] m-[0px]">
         <p className="leading-[18px] text-black">
           <span className="font-semibold">
-            {uploadMode === 'photo-only' || uploadMode === 'image-only' 
+            {uploadMode === 'photo-only' ||
+            uploadMode === 'slow-upload-v7' ||
+            uploadMode === 'image-only' ||
+            uploadMode === 'image-only-v5'
               ? `Upload your photo${totalPhotos > 1 ? 's' : ''}` 
               : 'Personalize your pendants'}
           </span>

@@ -191,7 +191,7 @@ export default function ProductPage() {
 
   const handleUploadClick = () => {
     // V3 (image with editor): reopen wizard with in-memory draft when possible; otherwise pick from gallery
-    if (uploadMode === 'photo-only') {
+    if (uploadMode === 'photo-only' || uploadMode === 'slow-upload-v7') {
       if (modalPersistedDraft && draftHasContent(modalPersistedDraft, totalPhotos)) {
         setModalMountKey((k) => k + 1);
         const stepToOpen = stepToResumeFromFirstEmpty();
@@ -206,6 +206,12 @@ export default function ProductPage() {
     }
     // V4 (skip editor): gallery only (no multi-step draft reopen in this flow)
     if (uploadMode === 'image-only') {
+      setIsGalleryOpen(true);
+      setIsGalleryFromModal(true);
+      return;
+    }
+    // V5 (duplicate of V4): gallery then open the popup editor immediately
+    if (uploadMode === 'image-only-v5') {
       setIsGalleryOpen(true);
       setIsGalleryFromModal(true);
       return;
@@ -371,7 +377,7 @@ export default function ProductPage() {
 
     for (let i = 0; i < totalPhotos; i++) {
       const p = draft[i];
-      if (uploadMode === 'photo-only' || uploadMode === 'image-only') {
+      if (uploadMode === 'photo-only' || uploadMode === 'slow-upload-v7' || uploadMode === 'image-only') {
         if (p?.image) {
           const merged = { ...p, name: sharedName.trim() };
           updatePhoto(i, merged);
@@ -471,7 +477,8 @@ export default function ProductPage() {
           uploadMode === 'personalization-bulk' ||
           uploadMode === 'personalization-bulk-regular' ||
           uploadMode === 'v5a-bulk-multi' ||
-          uploadMode === 'photo-only'
+          uploadMode === 'photo-only' ||
+          uploadMode === 'slow-upload-v7'
         ) {
           // New gallery session replaces any in-memory wizard draft
           setModalPersistedDraft(null);
@@ -508,6 +515,35 @@ export default function ProductPage() {
           const filledIndices = emptySlots.slice(0, take);
           bulkUpdatePhotos(newlySelectedImages, shouldMarkFirstPendantWarning, shouldMarkSecondAsError);
           beginSimulatedUpload(filledIndices);
+        } else if (uploadMode === 'image-only-v5') {
+          // V5 (dup of V4): update photos and open the popup editor immediately (stay on step 1).
+          const v5BlockingMsg =
+            "This photo is too small. Please replace it with one that's at least 600 x 600 pixels.";
+          // V5: Step 1 should be a regular image (no warning). Only pendant 2 is blocking.
+          const shouldMarkFirstPendantWarning = false;
+          const emptySlots: number[] = [];
+          for (let i = 0; i < totalPhotos; i++) {
+            if (photos[i].image === null) emptySlots.push(i);
+          }
+          const take = Math.min(newlySelectedImages.length, emptySlots.length);
+          const filledIndices = emptySlots.slice(0, take);
+          // Do NOT use the V4 deferred error logic — V5 shows a blocking error inside the popup.
+          bulkUpdatePhotos(newlySelectedImages, shouldMarkFirstPendantWarning, false);
+          if (filledIndices.includes(1)) {
+            updatePhoto(1, {
+              hasError: true,
+              errorMessage: v5BlockingMsg,
+              hasWarning: false,
+            });
+          }
+          beginSimulatedUpload(filledIndices);
+
+          setModalPersistedDraft(null);
+          setModalMountKey((k) => k + 1);
+          setIsEditMode(false);
+          setCurrentStep(1);
+          setLastInteractedStep(1);
+          setIsModalOpen(true);
         }
       }
     }
@@ -557,7 +593,11 @@ export default function ProductPage() {
 
     const isPersonalizationMode =
       uploadMode === 'personalization-bulk' || uploadMode === 'personalization-bulk-regular';
-    const isPhotoOnlyMode = uploadMode === 'photo-only' || uploadMode === 'image-only';
+    const isPhotoOnlyMode =
+      uploadMode === 'photo-only' ||
+      uploadMode === 'slow-upload-v7' ||
+      uploadMode === 'image-only' ||
+      uploadMode === 'image-only-v5';
     const isV1Mode = uploadMode === 'personalization-bulk'; // V1 - names are optional (informative)
     const isV2Mode = uploadMode === 'personalization-bulk-regular'; // V2 - names are mandatory
     
@@ -689,8 +729,10 @@ export default function ProductPage() {
           <option value="personalization-bulk-regular">V2: Mandatory Personalization</option>
           <option value="photo-only">V3: Image with Editor</option>
           <option value="image-only">V4: Skip Editor (w/ warning + error msgs)</option>
-          <option value="v5a-bulk-multi">V5 A: Multi-Personalization (In popup)</option>
-          <option value="v5b-inline-multi">V5 B: Multi-Personalization (IEC)</option>
+          <option value="image-only-v5">V5: Image + Editor (Block low-res img)</option>
+          <option value="v5a-bulk-multi">V6 A: Multi-Personalization (In popup)</option>
+          <option value="v5b-inline-multi">V6 B: Multi-Personalization (IEC)</option>
+          <option value="slow-upload-v7">V7: Slow Upload</option>
         </select>
       </div>
       
@@ -744,7 +786,7 @@ export default function ProductPage() {
                   name={sharedName}
                   onNameChange={setSharedName}
                 />
-              ) : !hasAnyUploads && Object.keys(validationErrors).length > 0 && (uploadMode === 'photo-only' || uploadMode === 'image-only') ? (
+              ) : !hasAnyUploads && Object.keys(validationErrors).length > 0 && (uploadMode === 'photo-only' || uploadMode === 'slow-upload-v7' || uploadMode === 'image-only' || uploadMode === 'image-only-v5') ? (
                 <BulkUploadOption 
                   onUploadClick={handleUploadClick}
                   onBulkUploadClick={handleGalleryOpen}
@@ -850,7 +892,7 @@ export default function ProductPage() {
                     name={sharedName}
                     onNameChange={setSharedName}
                   />
-                ) : !hasAnyUploads && Object.keys(validationErrors).length > 0 && (uploadMode === 'photo-only' || uploadMode === 'image-only') ? (
+                ) : !hasAnyUploads && Object.keys(validationErrors).length > 0 && (uploadMode === 'photo-only' || uploadMode === 'slow-upload-v7' || uploadMode === 'image-only' || uploadMode === 'image-only-v5') ? (
                   <BulkUploadOption 
                     onUploadClick={handleUploadClick}
                     onBulkUploadClick={handleGalleryOpen}
@@ -949,7 +991,7 @@ export default function ProductPage() {
         />
       )}
 
-      {isModalOpen && uploadMode === 'photo-only' && (
+      {isModalOpen && (uploadMode === 'photo-only' || uploadMode === 'slow-upload-v7') && (
         <SvgPhotoOnlyModal 
           key={modalMountKey}
           step={currentStep}
@@ -965,7 +1007,7 @@ export default function ProductPage() {
         />
       )}
       
-      {isModalOpen && uploadMode === 'image-only' && (
+      {isModalOpen && (uploadMode === 'image-only' || uploadMode === 'image-only-v5') && (
         <ImagePhotoOnlyModal 
           key={modalMountKey}
           step={currentStep}

@@ -24,7 +24,7 @@ function Icon() {
 
 export default function PhotoWarning() {
   return (
-    <div className="relative size-8 -top-2 -left-2" data-name="PhotoWarning">
+    <div className="relative size-full" data-name="PhotoWarning">
       <Icon />
     </div>
   );

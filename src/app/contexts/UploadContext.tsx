@@ -15,6 +15,10 @@ function snapUploadProgress(t: number): number {
 export type UploadMode =
   | 'personalization-bulk'
   | 'personalization-bulk-regular'
+  /** V5: like V4, but opens editor popup after gallery selection */
+  | 'image-only-v5'
+  /** V7: duplicate of V3, but simulated uploads are intentionally slow */
+  | 'slow-upload-v7'
   /** V5 A: stepper modal, multi-personalization per pendant */
   | 'v5a-bulk-multi'
   | 'photo-only'
@@ -58,6 +62,8 @@ interface UploadContextType {
   isSlotPendingSimulatedUpload: (slotIndex: number) => boolean;
   /** Start simulated uploads (~4s each, sequential). Indices are pendant slots (0-based). */
   beginSimulatedUpload: (slotIndices: number[]) => void;
+  /** Cancel a pending/active simulated upload for a specific slot (0-based). */
+  cancelSimulatedUploadForSlot: (slotIndex: number) => void;
 }
 
 const UploadContext = createContext<UploadContextType | undefined>(undefined);
@@ -71,6 +77,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const [uploadBatchSlots, setUploadBatchSlots] = useState<number[] | null>(null);
   const [uploadCompletedInBatch, setUploadCompletedInBatch] = useState<number[]>([]);
   const uploadAbortRef = useRef<AbortController | null>(null);
+  const cancelledSlotsRef = useRef<Set<number>>(new Set());
   /** Apply `hasError` after simulated upload completes for that slot (demo: V4 skip editor). */
   const deferredErrorAfterUploadRef = useRef<Map<number, string>>(new Map());
 
@@ -155,6 +162,16 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const cancelSimulatedUploadForSlot = (slotIndex: number) => {
+    cancelledSlotsRef.current.add(slotIndex);
+    deferredErrorAfterUploadRef.current.delete(slotIndex);
+    setUploadCompletedInBatch((prev) =>
+      prev.includes(slotIndex) ? prev : [...prev, slotIndex].sort((a, b) => a - b)
+    );
+    // Clear the image so the slot behaves like "cancelled" (user can re-upload).
+    deletePhoto(slotIndex);
+  };
+
   const resetUpload = () => {
     uploadAbortRef.current?.abort();
     uploadAbortRef.current = null;
@@ -184,6 +201,11 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       uploadAbortRef.current?.abort();
       const ac = new AbortController();
       uploadAbortRef.current = ac;
+      // New upload batch: reset per-slot cancellations
+      cancelledSlotsRef.current = new Set();
+
+      const msPerImage =
+        uploadMode === 'slow-upload-v7' ? 20000 : SIMULATED_UPLOAD_MS_PER_IMAGE;
 
       const run = async () => {
         setIsAnyUploading(true);
@@ -192,6 +214,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         try {
           for (const idx of q) {
             if (ac.signal.aborted) break;
+            if (cancelledSlotsRef.current.has(idx)) continue;
             setActiveUploadSlot(idx);
             setActiveUploadProgress(0);
 
@@ -203,7 +226,11 @@ export function UploadProvider({ children }: { children: ReactNode }) {
                   resolve();
                   return;
                 }
-                const t = Math.min(1, (now - start) / SIMULATED_UPLOAD_MS_PER_IMAGE);
+                if (cancelledSlotsRef.current.has(idx)) {
+                  resolve();
+                  return;
+                }
+                const t = Math.min(1, (now - start) / msPerImage);
                 const snapped = snapUploadProgress(t);
                 if (snapped !== lastSnapped) {
                   lastSnapped = snapped;
@@ -220,6 +247,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
             });
 
             if (ac.signal.aborted) break;
+            if (cancelledSlotsRef.current.has(idx)) continue;
             const deferredMsg = deferredErrorAfterUploadRef.current.get(idx);
             if (deferredMsg !== undefined) {
               deferredErrorAfterUploadRef.current.delete(idx);
@@ -248,7 +276,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
 
       void run();
     },
-    [totalPhotos]
+    [totalPhotos, uploadMode]
   );
 
   const reorderPhotos = (fromIndex: number, toIndex: number) => {
@@ -282,6 +310,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         uploadCompletedInBatch,
         isSlotPendingSimulatedUpload,
         beginSimulatedUpload,
+        cancelSimulatedUploadForSlot,
       }}
     >
       {children}

@@ -391,6 +391,8 @@ export default function BulkPhotoMultiPersonalizationModal({
     }
   };
 
+  const showSaveAndClose = totalPhotos > 1 && currentStep < totalPhotos;
+
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-[16px]"
@@ -426,9 +428,15 @@ export default function BulkPhotoMultiPersonalizationModal({
                   <Stepper currentStep={currentStep} totalSteps={totalPhotos} onStepClick={handleStepperNavigate} />
                 </div>
               )}
+
+              {allowStepNavigationGestures && (
+                <p className="w-full text-center text-[14px] font-normal leading-[18px] text-black">
+                  Pendant {currentStep} of {totalPhotos}
+                </p>
+              )}
               
               {/* Image Upload Area - Regular Photo (not SVG editor) */}
-              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full px-[24px]">
+              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
                 <div 
                   className="content-stretch flex flex-col items-center relative rounded-[4px] shrink-0 w-full"
                   onTouchStart={allowStepNavigationGestures ? handleTouchStart : undefined}
@@ -461,7 +469,9 @@ export default function BulkPhotoMultiPersonalizationModal({
                         {/* Warning icon overlay on top left (V5 B image-only: no low-res warning) */}
                         {!imageOnly && currentPhoto?.hasWarning && (
                           <div className="absolute top-[16px] left-[16px] size-[32px]">
-                            <PhotoWarning />
+                            <div className="relative size-full scale-[1.33] origin-center">
+                              <PhotoWarning />
+                            </div>
                           </div>
                         )}
                         
@@ -675,7 +685,7 @@ export default function BulkPhotoMultiPersonalizationModal({
                         <p className="font-semibold leading-[18px] text-[14px] text-black">Low-Resolution Image</p>
                       </div>
                       <p className="font-normal !text-[14px] leading-[18px] text-black">
-                        {`We recommend uploading a higher-quality image.  You can continue with this one, but we aren't responsible if it appears blurry.`}
+                        {`We recommend uploading a higher-quality image. You can continue, but we’re not responsible if it appears blurry.`}
                       </p>
                     </div>
                   </div>
@@ -686,25 +696,33 @@ export default function BulkPhotoMultiPersonalizationModal({
 
         {/* Sticky footer: primary actions always visible */}
         <div className="shrink-0 border-t border-[#e8e8e8] bg-white px-[16px] py-[14px]">
-          <div className="flex w-full flex-wrap items-center justify-between gap-y-[12px] gap-x-[16px]">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saveAndCloseDisabled}
-              title={
-                saveAndCloseDisabled
-                  ? imageOnly
-                    ? 'Upload images from Image 1 forward (at least one step) to save and close'
-                    : 'Complete personalization from Image 1 forward (at least one step) to save and close'
-                  : undefined
-              }
-              className={`relative flex shrink-0 items-center justify-center ${
-                saveAndCloseDisabled ? 'cursor-not-allowed opacity-40' : ''
-              }`}
-            >
-              <div aria-hidden="true" className="pointer-events-none absolute inset-0 border-b border-solid border-[#1e1e1e]" />
-              <span className="relative text-[14px] font-semibold leading-[18px] not-italic text-[#1e1e1e]">Save & Close</span>
-            </button>
+          <div
+            className={`flex w-full flex-wrap items-center gap-y-[12px] gap-x-[16px] ${
+              showSaveAndClose ? 'justify-between' : 'justify-end'
+            }`}
+          >
+            {showSaveAndClose && (
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saveAndCloseDisabled}
+                title={
+                  saveAndCloseDisabled
+                    ? imageOnly
+                      ? 'Upload images from Image 1 forward (at least one step) to save and close'
+                      : 'Complete personalization from Image 1 forward (at least one step) to save and close'
+                    : undefined
+                }
+                className={`relative flex shrink-0 items-center justify-center ${
+                  saveAndCloseDisabled ? 'cursor-not-allowed opacity-40' : ''
+                }`}
+              >
+                <div aria-hidden="true" className="pointer-events-none absolute inset-0 border-b border-solid border-[#1e1e1e]" />
+                <span className="relative text-[14px] font-semibold leading-[18px] not-italic text-[#1e1e1e]">
+                  Save & Close
+                </span>
+              </button>
+            )}
 
             <div className="flex shrink-0 items-center gap-[24px]">
               {totalPhotos > 1 && currentStep > 1 && (
