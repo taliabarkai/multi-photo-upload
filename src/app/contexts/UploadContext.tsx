@@ -3,15 +3,6 @@ import React, { createContext, useContext, useState, useRef, useCallback, ReactN
 /** Simulated upload duration per image (ms). */
 export const SIMULATED_UPLOAD_MS_PER_IMAGE = 4000;
 
-/** Display progress in coarse steps (e.g. 0, 24, 48, …) to avoid digit flicker. */
-export const UPLOAD_PROGRESS_STEP = 0.24;
-
-function snapUploadProgress(t: number): number {
-  const raw = Math.min(1, Math.max(0, t));
-  if (raw >= 1) return 1;
-  return Math.floor(raw / UPLOAD_PROGRESS_STEP) * UPLOAD_PROGRESS_STEP;
-}
-
 export type UploadMode =
   | 'personalization-bulk'
   | 'personalization-bulk-regular'
@@ -220,7 +211,6 @@ export function UploadProvider({ children }: { children: ReactNode }) {
 
             await new Promise<void>((resolve) => {
               const start = performance.now();
-              let lastSnapped = -1;
               const tick = (now: number) => {
                 if (ac.signal.aborted) {
                   resolve();
@@ -230,12 +220,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
                   resolve();
                   return;
                 }
-                const t = Math.min(1, (now - start) / msPerImage);
-                const snapped = snapUploadProgress(t);
-                if (snapped !== lastSnapped) {
-                  lastSnapped = snapped;
-                  setActiveUploadProgress(snapped);
-                }
+                const t = Math.min(1, Math.max(0, (now - start) / msPerImage));
+                setActiveUploadProgress(t);
                 if (t < 1) {
                   requestAnimationFrame(tick);
                 } else {

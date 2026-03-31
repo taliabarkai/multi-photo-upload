@@ -44,9 +44,6 @@ export default function SvgPhotoOnlyModal({
   // Initialize draft state from current photos - sync with actual photos
   const [draftPhotos, setDraftPhotos] = useState<typeof photos>([]);
 
-  const v3TooSmallError =
-    "This photo is too small. Please replace it with one that's at least 600 x 600 pixels.";
-  
   useEffect(() => {
     const base = photos.map((photo) => ({ ...photo }));
     let initial: PhotoData[];
@@ -54,16 +51,6 @@ export default function SvgPhotoOnlyModal({
       initial = base;
     } else if (pendingDraftImages.length > 0) {
       initial = mergePendingImagesIntoDraft(base, pendingDraftImages, isEditMode);
-      // V3-only prototype: when selecting exactly 3 pendants and entering the editor,
-      // force Pendant 1 into a blocking error state until replaced.
-      if (totalPhotos === 3 && initial[0]?.image) {
-        initial[0] = {
-          ...initial[0],
-          hasError: true,
-          errorMessage: v3TooSmallError,
-          hasWarning: false,
-        };
-      }
     } else if (persistedDraft && persistedDraft.length > 0) {
       initial = persistedDraft.map((p) => ({ ...p }));
     } else {

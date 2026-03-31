@@ -33,6 +33,11 @@ interface BulkPhotoMultiPersonalizationModalProps {
   persistedDraft?: PhotoData[] | null;
   /** V5 B: modal is image upload only; title/color/frame are edited on the product page */
   imageOnly?: boolean;
+  /**
+   * Single-image flow: when set, the modal edits ONLY this pendant slot (0-based),
+   * with no stepper and no coupling to other images.
+   */
+  singleSlotIndex?: number | null;
 }
 
 export default function BulkPhotoMultiPersonalizationModal({
@@ -48,18 +53,27 @@ export default function BulkPhotoMultiPersonalizationModal({
   pendingDraftImages = [],
   persistedDraft = null,
   imageOnly = false,
+  singleSlotIndex = null,
 }: BulkPhotoMultiPersonalizationModalProps) {
   const { photos, totalPhotos } = useUpload();
   
-  const currentStep = step;
-  /** V5 B: no stepper; no swipe/keys to change pendant — only edit the current image */
-  const allowStepNavigationGestures = totalPhotos > 1 && !imageOnly;
+  const isSingleSlot = singleSlotIndex !== null && singleSlotIndex !== undefined;
+  const totalSteps = isSingleSlot ? 1 : totalPhotos;
+  const currentStep = isSingleSlot ? 1 : step;
+  /** V5 B + single-slot: no stepper; no swipe/keys to change pendant — only edit the current image */
+  const allowStepNavigationGestures = !isSingleSlot && totalSteps > 1 && !imageOnly;
 
   // Initialize draft state from current photos - sync with actual photos
   const [draftPhotos, setDraftPhotos] = useState<typeof photos>([]);
   
   // Initialize draft once on mount (parent `key` resets the modal when reopening)
   useEffect(() => {
+    if (isSingleSlot) {
+      const slot = Math.min(Math.max(0, singleSlotIndex as number), totalPhotos - 1);
+      setDraftPhotos([{ ...photos[slot] }]);
+      return;
+    }
+
     const base = photos.map((photo) => ({ ...photo }));
     let initial: PhotoData[];
     if (isEditMode) {
@@ -114,6 +128,7 @@ export default function BulkPhotoMultiPersonalizationModal({
 
   // Handle step changes
   useEffect(() => {
+    if (isSingleSlot) return;
     if (currentStep !== prevStep) {
       // Save previous photo to draft
       const updatedDrafts = [...draftPhotos];
@@ -168,12 +183,26 @@ export default function BulkPhotoMultiPersonalizationModal({
           frameSizeXL: localFrameSize,
         };
 
+  const expandSingleDraft = (singleDraft: PhotoData[]): PhotoData[] => {
+    if (!isSingleSlot) return singleDraft;
+    const slot = Math.min(Math.max(0, singleSlotIndex as number), totalPhotos - 1);
+    const base = photos.slice(0, totalPhotos).map((p) => ({ ...p }));
+    base[slot] = { ...base[slot], ...singleDraft[0] };
+    return base;
+  };
+
   const handleUploadClick = () => {
-    onGalleryOpen(currentStep - 1);
+    const targetIndex = isSingleSlot
+      ? Math.min(Math.max(0, singleSlotIndex as number), totalPhotos - 1)
+      : currentStep - 1;
+    onGalleryOpen(targetIndex);
   };
 
   const handleReplaceClick = () => {
-    onGalleryOpen(currentStep - 1);
+    const targetIndex = isSingleSlot
+      ? Math.min(Math.max(0, singleSlotIndex as number), totalPhotos - 1)
+      : currentStep - 1;
+    onGalleryOpen(targetIndex);
   };
 
   const handleZoomIn = () => {
@@ -196,29 +225,30 @@ export default function BulkPhotoMultiPersonalizationModal({
     };
     setDraftPhotos(updatedDrafts);
 
-    if (currentStep < totalPhotos) {
+    if (currentStep < totalSteps) {
       onStepChange(currentStep + 1);
     } else {
       const committed = flushCurrentStepToDraft(updatedDrafts, currentStep, currentStepPatch());
-      onCommitDraft(committed);
+      onCommitDraft(expandSingleDraft(committed));
     }
   };
 
   const flushAndDismiss = () => {
     const flushed = flushCurrentStepToDraft(draftPhotos, currentStep, currentStepPatch());
-    onDismissWithDraft(flushed);
+    onDismissWithDraft(expandSingleDraft(flushed));
   };
 
   const draftWithCurrentStep = flushCurrentStepToDraft(draftPhotos, currentStep, currentStepPatch());
-  const saveAndCloseDisabled =
-    draftPhotos.length === 0 ||
-    (imageOnly
-      ? getCompletedPrefixLengthImageOnly(draftWithCurrentStep, totalPhotos) === 0
-      : getCompletedPrefixLengthV6(draftWithCurrentStep, totalPhotos) === 0);
+  const saveAndCloseDisabled = isSingleSlot
+    ? !isNextEnabled
+    : draftPhotos.length === 0 ||
+      (imageOnly
+        ? getCompletedPrefixLengthImageOnly(draftWithCurrentStep, totalPhotos) === 0
+        : getCompletedPrefixLengthV6(draftWithCurrentStep, totalPhotos) === 0);
 
   const handleSave = () => {
     if (saveAndCloseDisabled) return;
-    onSaveAndClose(flushCurrentStepToDraft(draftPhotos, currentStep, currentStepPatch()));
+    onSaveAndClose(expandSingleDraft(flushCurrentStepToDraft(draftPhotos, currentStep, currentStepPatch())));
   };
 
   const handleCancel = () => {
@@ -230,6 +260,10 @@ export default function BulkPhotoMultiPersonalizationModal({
   };
 
   const handleBack = () => {
+    if (isSingleSlot) {
+      flushAndDismiss();
+      return;
+    }
     if (currentStep > 1) {
       onStepChange(currentStep - 1);
     } else {
@@ -268,7 +302,7 @@ export default function BulkPhotoMultiPersonalizationModal({
       if (e.key === 'ArrowLeft' && currentStep > 1) {
         e.preventDefault();
         handleBack();
-      } else if (e.key === 'ArrowRight' && currentStep < totalPhotos && isNextEnabled) {
+      } else if (e.key === 'ArrowRight' && currentStep < totalSteps && isNextEnabled) {
         e.preventDefault();
         handleNext();
       }
@@ -293,7 +327,7 @@ export default function BulkPhotoMultiPersonalizationModal({
       const touchEndPos = e.changedTouches[0].clientX;
       const swipeDistance = touchStartX - touchEndPos;
       
-      if (swipeDistance > 50 && currentStep < totalPhotos && isNextEnabled) {
+      if (swipeDistance > 50 && currentStep < totalSteps && isNextEnabled) {
         handleNext();
       } else if (swipeDistance < -50 && currentStep > 1) {
         handleBack();
@@ -322,7 +356,7 @@ export default function BulkPhotoMultiPersonalizationModal({
     if (dragStartX !== null && isDraggingHorizontal && allowStepNavigationGestures) {
       const deltaX = e.clientX - dragStartX;
       
-      if (deltaX < -50 && currentStep < totalPhotos && isNextEnabled) {
+      if (deltaX < -50 && currentStep < totalSteps && isNextEnabled) {
         handleNext();
       } else if (deltaX > 50 && currentStep > 1) {
         handleBack();
@@ -370,7 +404,7 @@ export default function BulkPhotoMultiPersonalizationModal({
         const newDelta = prev + e.deltaX;
         
         // Navigate when threshold is reached
-        if (newDelta > 100 && currentStep < totalPhotos && isNextEnabled) {
+        if (newDelta > 100 && currentStep < totalSteps && isNextEnabled) {
           handleNext();
           return 0; // Reset
         } else if (newDelta < -100 && currentStep > 1) {
@@ -391,7 +425,7 @@ export default function BulkPhotoMultiPersonalizationModal({
     }
   };
 
-  const showSaveAndClose = totalPhotos > 1 && currentStep < totalPhotos;
+  const showSaveAndClose = !isSingleSlot && totalSteps > 1 && currentStep < totalSteps;
 
   return (
     <div 
@@ -425,13 +459,13 @@ export default function BulkPhotoMultiPersonalizationModal({
               {/* Pagination (V5 A only — V5 B is single-image edit, no stepper) */}
               {allowStepNavigationGestures && (
                 <div className="w-full flex items-center justify-center">
-                  <Stepper currentStep={currentStep} totalSteps={totalPhotos} onStepClick={handleStepperNavigate} />
+                  <Stepper currentStep={currentStep} totalSteps={totalSteps} onStepClick={handleStepperNavigate} />
                 </div>
               )}
 
               {allowStepNavigationGestures && (
                 <p className="w-full text-center text-[14px] font-normal leading-[18px] text-black">
-                  Pendant {currentStep} of {totalPhotos}
+                  Pendant {currentStep} of {totalSteps}
                 </p>
               )}
               
@@ -725,7 +759,7 @@ export default function BulkPhotoMultiPersonalizationModal({
             )}
 
             <div className="flex shrink-0 items-center gap-[24px]">
-              {totalPhotos > 1 && currentStep > 1 && (
+              {totalSteps > 1 && currentStep > 1 && (
                 <button
                   type="button"
                   onClick={handleBack}
@@ -744,7 +778,7 @@ export default function BulkPhotoMultiPersonalizationModal({
                 }`}
               >
                 <span className="text-[14px] font-semibold uppercase leading-[18px] tracking-[0.14px] text-white">
-                  {currentStep < totalPhotos ? 'next' : 'confirm'}
+                  {currentStep < totalSteps ? 'next' : 'confirm'}
                 </span>
               </button>
             </div>

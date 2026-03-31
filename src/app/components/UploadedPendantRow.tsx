@@ -84,6 +84,8 @@ export interface UploadedPendantRowProps {
   imageSrc: string | null;
   slotPending: boolean;
   uploadOverlayProgress: number;
+  /** When true, shows a continuous spinner (queued uploads waiting for the active slot). */
+  uploadOverlayIndeterminate?: boolean;
   isAnyUploading: boolean;
   onPhotoClick: () => void;
   onEdit: () => void;
@@ -108,6 +110,7 @@ export function UploadedPendantRow({
   imageSrc,
   slotPending,
   uploadOverlayProgress,
+  uploadOverlayIndeterminate = false,
   isAnyUploading,
   onPhotoClick,
   onEdit,
@@ -185,7 +188,10 @@ export function UploadedPendantRow({
               >
                 {slotPending ? (
                   <div className="relative h-full w-full overflow-hidden rounded-[4px] bg-[#f5f5f5]">
-                    <ImageUploadOverlay progress={uploadOverlayProgress} />
+                    <ImageUploadOverlay
+                      progress={uploadOverlayProgress}
+                      indeterminate={uploadOverlayIndeterminate}
+                    />
                   </div>
                 ) : imageSrc ? (
                   <div className="w-full h-full overflow-hidden rounded-[4px]">

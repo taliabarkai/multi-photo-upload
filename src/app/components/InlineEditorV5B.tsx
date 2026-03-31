@@ -4,8 +4,9 @@ import { EmptyPendantSlot, UploadedPendantRow } from './UploadedPendantRow';
 import { COLOR_SWATCHES } from '../constants/multiPersonalization';
 
 interface InlineEditorV5BProps {
-  onOpenGallery: () => void;
-  /** Opens the stepper modal for this pendant (same as V3 Edit / image tap). */
+  /** Open device gallery for one pendant only (single image → that slot). */
+  onOpenGalleryForSlot: (pendantIndex: number) => void;
+  /** Opens the image editor modal for this pendant (single image, no steppers). */
   onEditPendant: (index: number) => void;
   onDeleteBlockImage: (index: number) => void;
   validationErrors?: { [key: number]: { image?: string; name?: string; combined?: string } };
@@ -99,7 +100,7 @@ function V5PersonalizationFields({
 }
 
 export default function InlineEditorV5B({
-  onOpenGallery,
+  onOpenGalleryForSlot,
   onEditPendant,
   onDeleteBlockImage,
   validationErrors,
@@ -122,7 +123,6 @@ export default function InlineEditorV5B({
         const photo = photos[index];
         const err = validationErrors?.[index];
         const slotPendingThumb = photo?.image != null && isSlotPendingSimulatedUpload(index);
-        const showProgressOnThumb = slotPendingThumb && activeUploadSlot === index;
 
         return (
           <div
@@ -132,14 +132,19 @@ export default function InlineEditorV5B({
             <p className="font-semibold leading-[18px] text-[14px] text-black">Image {index + 1}</p>
 
             <div className="w-full flex flex-col gap-[8px]">
-              {photo?.image || showProgressOnThumb ? (
+              {photo?.image || slotPendingThumb ? (
                 <>
                   <UploadedPendantRow
                     pendantIndex={index}
                     totalPhotos={totalPhotos}
                     imageSrc={photo?.image ?? null}
-                    slotPending={showProgressOnThumb}
-                    uploadOverlayProgress={activeUploadProgress}
+                    slotPending={slotPendingThumb}
+                    uploadOverlayProgress={
+                      activeUploadSlot === index ? activeUploadProgress : 0
+                    }
+                    uploadOverlayIndeterminate={
+                      slotPendingThumb && activeUploadSlot !== index
+                    }
                     isAnyUploading={isAnyUploading}
                     onPhotoClick={() => onEditPendant(index)}
                     onThumbnailClick={() => onEditPendant(index)}
@@ -153,7 +158,7 @@ export default function InlineEditorV5B({
                 <EmptyPendantSlot
                   pendantIndex={index}
                   totalPhotos={totalPhotos}
-                  onClick={onOpenGallery}
+                  onClick={() => onOpenGalleryForSlot(index)}
                   primaryLine={`Image ${index + 1}`}
                   subtitle=""
                   hideReorderHandle

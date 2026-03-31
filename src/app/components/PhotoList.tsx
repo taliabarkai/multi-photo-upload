@@ -79,7 +79,6 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
     isSlotPendingSimulatedUpload,
     cancelSimulatedUploadForSlot,
   } = useUpload();
-    useUpload();
   const slotPending = hasImage && isSlotPendingSimulatedUpload(index);
   const slotActiveUpload = slotPending && activeUploadSlot === index;
   const uploadOverlayProgress = slotActiveUpload ? activeUploadProgress : 0;
@@ -186,7 +185,10 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
                 >
                   {slotPending ? (
                     <div className="relative h-full w-full overflow-hidden rounded-[4px] bg-[#f5f5f5]">
-                      <ImageUploadOverlay progress={uploadOverlayProgress} />
+                      <ImageUploadOverlay
+                        progress={uploadOverlayProgress}
+                        indeterminate={slotPending && !slotActiveUpload}
+                      />
                     </div>
                   ) : (uploadMode === 'personalization-bulk' || uploadMode === 'photo-only' || uploadMode === 'slow-upload-v7') ? (
                     // Heart-shaped masked image for V1 and V3

@@ -34,6 +34,55 @@ import {
   mergePendingImagesIntoDraft,
   slotNeedsSimulatedUpload,
 } from '../utils/modalDraft';
+import ValidationErrorIcon from '../components/ValidationErrorIcon';
+
+/** V3 (photo-only): family name must stay visible after uploads — PhotoList replaces BulkUploadOption. */
+function V3FamilyNameSection({
+  name,
+  onNameChange,
+  nameError,
+}: {
+  name: string;
+  onNameChange: (v: string) => void;
+  nameError?: boolean;
+}) {
+  const charCount = name.length;
+  return (
+    <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full px-[0px] pt-[12px] pb-[0px]">
+      <div className="content-stretch flex items-center relative shrink-0 w-full">
+        <p className="font-medium leading-[18px] not-italic text-[14px]">Family Name:</p>
+      </div>
+      <div className="flex flex-col gap-[8px] w-full">
+        <div className="h-[48px] relative rounded-[4px] shrink-0 w-full group/input">
+          <div className="flex flex-row items-center overflow-clip rounded-[inherit] size-full">
+            <div className="content-stretch flex font-normal items-center justify-between not-italic px-[12px] relative size-full text-black border border-[#E3E3E3] rounded-[4px]">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => onNameChange(e.target.value)}
+                placeholder="e.g. John"
+                maxLength={12}
+                className="flex-1 leading-[18px] text-[16px] outline-none bg-transparent placeholder:text-[#989898]"
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+                    e.currentTarget.select();
+                  }
+                }}
+              />
+              <p className="leading-[14px] relative shrink-0 text-[10px]">{charCount}/12</p>
+            </div>
+          </div>
+        </div>
+        {nameError && (
+          <div className="flex items-center gap-[4px]">
+            <ValidationErrorIcon />
+            <p className="font-normal leading-[16px] text-[12px] text-[#c41314]">Please enter a name</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function ProductPage() {
   const {
@@ -216,10 +265,12 @@ export default function ProductPage() {
       setIsGalleryFromModal(true);
       return;
     }
-    // V5 B (IEC): gallery saves to the IE only; open the image editor via Edit on each row
+    // V5 B (IEC): one image per slot — target the first empty pendant (same as replace flow)
     if (uploadMode === 'v5b-inline-multi') {
+      const fe = getFirstEmptySlotIndex(photos, totalPhotos);
+      setReplacePhotoIndex(fe !== -1 ? fe : 0);
       setIsGalleryOpen(true);
-      setIsGalleryFromModal(true);
+      setIsGalleryFromModal(false);
       return;
     }
     // V1 / V2 / V5 A: reopen wizard with saved draft, or gallery for new picks
@@ -405,6 +456,12 @@ export default function ProductPage() {
    * The clicked row index is not used for routing; sequential steps are derived after selection.
    */
   const handleEmptySlotOpen = (_clickedSlotIndex?: number) => {
+    if (uploadMode === 'v5b-inline-multi' && _clickedSlotIndex !== undefined) {
+      setReplacePhotoIndex(_clickedSlotIndex);
+      setIsGalleryOpen(true);
+      setIsGalleryFromModal(false);
+      return;
+    }
     handleGalleryOpen();
   };
 
@@ -462,17 +519,20 @@ export default function ProductPage() {
       
       // Only proceed if there are new images to upload
       if (newlySelectedImages.length > 0) {
-        // V5 B (IEC): save picks straight to the IE; user opens the image editor with Edit
+        // V5 B: only one image at a time tied to a slot (empty-slot / replace uses replacePhotoIndex).
+        // Fallback: first empty slot + first pick if gallery opened without a slot (e.g. legacy CTA).
         if (uploadMode === 'v5b-inline-multi') {
           setModalPersistedDraft(null);
-          const emptySlots: number[] = [];
-          for (let i = 0; i < totalPhotos; i++) {
-            if (photos[i].image === null) emptySlots.push(i);
+          const slot = getFirstEmptySlotIndex(photos, totalPhotos);
+          if (slot !== -1 && newlySelectedImages[0]) {
+            updatePhoto(slot, {
+              image: newlySelectedImages[0],
+              hasError: false,
+              errorMessage: undefined,
+              hasWarning: false,
+            });
+            beginSimulatedUpload([slot]);
           }
-          const take = Math.min(newlySelectedImages.length, emptySlots.length);
-          const filledIndices = emptySlots.slice(0, take);
-          bulkUpdatePhotos(newlySelectedImages, false, false);
-          beginSimulatedUpload(filledIndices);
         } else if (
           uploadMode === 'personalization-bulk' ||
           uploadMode === 'personalization-bulk-regular' ||
@@ -731,7 +791,7 @@ export default function ProductPage() {
           <option value="image-only">V4: Skip Editor (w/ warning + error msgs)</option>
           <option value="image-only-v5">V5: Image + Editor (Block low-res img)</option>
           <option value="v5a-bulk-multi">V6 A: Multi-Personalization (In popup)</option>
-          <option value="v5b-inline-multi">V6 B: Multi-Personalization (IEC)</option>
+          <option value="v5b-inline-multi">V5 B: Multi-Personalization (IEC)</option>
           <option value="slow-upload-v7">V7: Slow Upload</option>
         </select>
       </div>
@@ -768,7 +828,8 @@ export default function ProductPage() {
             <div className="content-stretch flex flex-col gap-[24px] items-center relative shrink-0 w-full max-w-[520px]">
               {uploadMode === 'v5b-inline-multi' ? (
                 <InlineEditorV5B
-                  onOpenGallery={() => {
+                  onOpenGalleryForSlot={(pendantIndex) => {
+                    setReplacePhotoIndex(pendantIndex);
                     setIsGalleryOpen(true);
                     setIsGalleryFromModal(false);
                   }}
@@ -818,6 +879,14 @@ export default function ProductPage() {
                   onEmptySlotClick={handleEmptySlotOpen}
                   onSlotRemove={handleSlotRemove}
                   validationErrors={validationErrors}
+                />
+              )}
+
+              {uploadMode === 'photo-only' && hasAnyUploads && (
+                <V3FamilyNameSection
+                  name={sharedName}
+                  onNameChange={setSharedName}
+                  nameError={!!validationErrors[-1]?.name}
                 />
               )}
               
@@ -874,7 +943,8 @@ export default function ProductPage() {
               <div className="content-stretch flex flex-col gap-[24px] items-center relative shrink-0 w-full">
                 {uploadMode === 'v5b-inline-multi' ? (
                   <InlineEditorV5B
-                    onOpenGallery={() => {
+                    onOpenGalleryForSlot={(pendantIndex) => {
+                      setReplacePhotoIndex(pendantIndex);
                       setIsGalleryOpen(true);
                       setIsGalleryFromModal(false);
                     }}
@@ -924,6 +994,14 @@ export default function ProductPage() {
                     onEmptySlotClick={handleEmptySlotOpen}
                     onSlotRemove={handleSlotRemove}
                     validationErrors={validationErrors}
+                  />
+                )}
+
+                {uploadMode === 'photo-only' && hasAnyUploads && (
+                  <V3FamilyNameSection
+                    name={sharedName}
+                    onNameChange={setSharedName}
+                    nameError={!!validationErrors[-1]?.name}
                   />
                 )}
                 
@@ -988,6 +1066,7 @@ export default function ProductPage() {
           pendingDraftImages={pendingDraftImages}
           persistedDraft={isEditMode ? null : modalPersistedDraft}
           imageOnly={uploadMode === 'v5b-inline-multi'}
+          singleSlotIndex={uploadMode === 'v5b-inline-multi' ? currentStep - 1 : null}
         />
       )}
 
