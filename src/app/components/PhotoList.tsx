@@ -13,6 +13,7 @@ import WarningPopup from './WarningPopup';
 import Icon from '../../imports/Icon-89-533'; // Updated to new drag icon
 import ValidationErrorIcon from './ValidationErrorIcon';
 import ImageUploadOverlay from './ImageUploadOverlay';
+import V7SlowUploadNotice from './V7SlowUploadNotice';
 import { colorLabelFromSwatchId } from '../constants/multiPersonalization';
 import { isStepCompleteV6 } from '../utils/modalDraft';
 
@@ -82,17 +83,7 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
   const slotPending = hasImage && isSlotPendingSimulatedUpload(index);
   const slotActiveUpload = slotPending && activeUploadSlot === index;
   const uploadOverlayProgress = slotActiveUpload ? activeUploadProgress : 0;
-  const [showSlowNotice, setShowSlowNotice] = useState(false);
   const isSlowUploadMode = uploadMode === 'slow-upload-v7';
-
-  useEffect(() => {
-    if (!(slotPending && isSlowUploadMode)) {
-      setShowSlowNotice(false);
-      return;
-    }
-    const t = window.setTimeout(() => setShowSlowNotice(true), 9000);
-    return () => window.clearTimeout(t);
-  }, [slotPending, isSlowUploadMode]);
 
   const [{ isDragging }, drag, preview] = useDrag({
     type: 'PHOTO',
@@ -187,7 +178,10 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
                     <div className="relative h-full w-full overflow-hidden rounded-[4px] bg-[#f5f5f5]">
                       <ImageUploadOverlay
                         progress={uploadOverlayProgress}
-                        indeterminate={slotPending && !slotActiveUpload}
+                        indeterminate={
+                          slotPending && !slotActiveUpload && uploadMode !== 'slow-upload-v7'
+                        }
+                        showProgressPercent={uploadMode === 'slow-upload-v7'}
                       />
                     </div>
                   ) : (uploadMode === 'personalization-bulk' || uploadMode === 'photo-only' || uploadMode === 'slow-upload-v7') ? (
@@ -271,23 +265,6 @@ const DraggablePhotoItem: React.FC<DraggablePhotoItemProps> = ({
                   <p className="font-normal leading-[18px] text-[14px] text-black">
                     {slotPending ? 'Uploading…' : `Pendant ${index + 1}`}
                   </p>
-                  {slotPending && isSlowUploadMode && showSlowNotice && (
-                    <p className="font-normal leading-[16px] text-[12px] text-[#666]">
-                      This upload is taking longer than usual due to file size or connection. You can{' '}
-                      <button
-                        type="button"
-                        className="pointer-events-auto inline align-baseline font-normal text-[12px] leading-[16px] text-[#666] underline decoration-solid cursor-pointer p-0 m-0 bg-transparent border-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          cancelSimulatedUploadForSlot(index);
-                          onRemove(index);
-                        }}
-                      >
-                        cancel upload
-                      </button>{' '}
-                      or wait.
-                    </p>
-                  )}
                   {!slotPending && photo.hasError && photo.errorMessage && (
                     <PhotoError message={photo.errorMessage} />
                   )}
@@ -487,9 +464,33 @@ function PhotoListContent({
   onSlotRemove,
   validationErrors,
 }: PhotoListProps) {
-  const { photos, totalPhotos, deletePhoto, reorderPhotos, updatePhoto, beginSimulatedUpload } =
-    useUpload();
+  const {
+    photos,
+    totalPhotos,
+    deletePhoto,
+    reorderPhotos,
+    updatePhoto,
+    beginSimulatedUpload,
+    isAnyUploading,
+    cancelSimulatedUploadForSlot,
+    isSlotPendingSimulatedUpload,
+  } = useUpload();
   const [showWarningPopup, setShowWarningPopup] = useState(false);
+  const [showV7SlowNotice, setShowV7SlowNotice] = useState(false);
+
+  useEffect(() => {
+    if (uploadMode !== 'slow-upload-v7') {
+      setShowV7SlowNotice(false);
+      return;
+    }
+    if (!isAnyUploading) {
+      setShowV7SlowNotice(false);
+      return;
+    }
+    setShowV7SlowNotice(false);
+    const id = window.setTimeout(() => setShowV7SlowNotice(true), 10_000);
+    return () => window.clearTimeout(id);
+  }, [uploadMode, isAnyUploading]);
   
   const uploadedCount = photos.slice(0, totalPhotos).filter(p => p.image !== null).length;
 
@@ -504,6 +505,15 @@ function PhotoListContent({
   const handleRemove = (index: number) => {
     deletePhoto(index);
     onSlotRemove?.(index);
+  };
+
+  const handleV7CancelUploads = () => {
+    for (let i = 0; i < totalPhotos; i++) {
+      if (isSlotPendingSimulatedUpload(i)) {
+        cancelSimulatedUploadForSlot(i);
+        onSlotRemove?.(i);
+      }
+    }
   };
 
   const handleSpecificEmptySlotClick = (index: number) => {
@@ -573,7 +583,11 @@ function PhotoListContent({
           />
         );
       })}
-      
+
+      {uploadMode === 'slow-upload-v7' && isAnyUploading && showV7SlowNotice && (
+        <V7SlowUploadNotice totalPhotos={totalPhotos} onCancelUploads={handleV7CancelUploads} />
+      )}
+
       {/* Warning Popup Modal */}
       {showWarningPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

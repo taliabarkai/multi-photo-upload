@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import ImageUploadOverlay from './ImageUploadOverlay';
 import svgPaths from '../../imports/svg-cqty5kzprz';
 import arrowPaths from '../../imports/svg-yaqq1s08pp';
@@ -124,17 +124,7 @@ export function UploadedPendantRow({
   const thumbHandler = onThumbnailClick ?? onPhotoClick;
   const showReorderIcon = totalPhotos > 1 && !hideReorderHandle;
   const { uploadMode, cancelSimulatedUploadForSlot } = useUpload();
-  const [showSlowNotice, setShowSlowNotice] = useState(false);
   const isSlowUploadMode = uploadMode === 'slow-upload-v7';
-
-  useEffect(() => {
-    if (!(slotPending && isSlowUploadMode)) {
-      setShowSlowNotice(false);
-      return;
-    }
-    const t = window.setTimeout(() => setShowSlowNotice(true), 9000);
-    return () => window.clearTimeout(t);
-  }, [slotPending, isSlowUploadMode]);
 
   return (
     <div className="relative w-full">
@@ -190,7 +180,8 @@ export function UploadedPendantRow({
                   <div className="relative h-full w-full overflow-hidden rounded-[4px] bg-[#f5f5f5]">
                     <ImageUploadOverlay
                       progress={uploadOverlayProgress}
-                      indeterminate={uploadOverlayIndeterminate}
+                      indeterminate={uploadOverlayIndeterminate && !isSlowUploadMode}
+                      showProgressPercent={isSlowUploadMode}
                     />
                   </div>
                 ) : imageSrc ? (
@@ -227,23 +218,6 @@ export function UploadedPendantRow({
                     ? 'Uploading…'
                     : primaryLabelOverride ?? `Pendant ${pendantIndex + 1}`}
                 </p>
-                {slotPending && isSlowUploadMode && showSlowNotice && (
-                  <p className="font-normal leading-[16px] text-[12px] text-[#666]">
-                    This upload is taking longer than usual due to file size or connection. You can{' '}
-                    <button
-                      type="button"
-                      className="pointer-events-auto inline align-baseline font-normal text-[12px] leading-[16px] text-[#666] underline decoration-solid cursor-pointer p-0 m-0 bg-transparent border-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        cancelSimulatedUploadForSlot(pendantIndex);
-                        onRemove();
-                      }}
-                    >
-                      cancel upload
-                    </button>{' '}
-                    or wait.
-                  </p>
-                )}
                 {!slotPending && secondaryContent}
               </button>
             </div>
